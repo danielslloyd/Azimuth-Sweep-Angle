@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Overwatch</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #000;
+            overflow: hidden;
+            font-family: 'Courier New', monospace;
+        }
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        #canvas {
+            display: block;
+        }
+        #voice-indicator {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #00ff00;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            opacity: 0.7;
+            transition: all 0.3s ease;
+        }
+        #voice-indicator.listening {
+            color: #ff3300;
+            opacity: 1;
+            animation: pulse 1s infinite;
+        }
+        #voice-indicator.processing {
+            color: #ffaa00;
+            opacity: 1;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        #status-overlay {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            color: #00ff00;
+            font-size: 12px;
+            opacity: 0.6;
+        }
+        #command-feedback {
+            position: fixed;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #ffffff;
+            font-size: 16px;
+            text-align: center;
+            max-width: 80%;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        #command-feedback.visible {
+            opacity: 0.9;
+        }
+        #instructions {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #00ff00;
+            font-size: 18px;
+            text-align: center;
+            padding: 40px;
+            border: 1px solid #00ff00;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 100;
+        }
+        #instructions.hidden {
+            display: none;
+        }
+        #instructions h1 {
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+        #instructions p {
+            margin: 10px 0;
+            opacity: 0.8;
+        }
+        #instructions button {
+            margin-top: 30px;
+            padding: 15px 40px;
+            background: transparent;
+            border: 1px solid #00ff00;
+            color: #00ff00;
+            font-family: inherit;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        #instructions button:hover {
+            background: #00ff00;
+            color: #000;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <div id="instructions">
+        <h1>PROJECT OVERWATCH</h1>
+        <p>Voice-Controlled Tactical Command</p>
+        <p>Issue commands using your voice</p>
+        <p>Example: "Alpha, move to grid C5"</p>
+        <p>Example: "Call airstrike on grid D7"</p>
+        <button id="start-btn">BEGIN MISSION</button>
+    </div>
+
+    <div id="status-overlay">
+        <div>GRID: <span id="grid-pos">--</span></div>
+        <div>SQUAD: <span id="squad-status">4/4</span></div>
+        <div>AIRSTRIKE: <span id="airstrike-status">READY</span></div>
+    </div>
+
+    <div id="command-feedback"></div>
+    <div id="voice-indicator">PRESS SPACE TO SPEAK</div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+        }
+    }
+    </script>
+    <script type="module" src="../src/main.js"></script>
+</body>
+</html>
