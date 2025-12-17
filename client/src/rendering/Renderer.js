@@ -10,7 +10,12 @@ const COLORS = {
     ENEMY: 0xff4444,       // Red (enemy markers)
     EXPLOSION: 0xffff00,   // Yellow-white (explosions)
     GRID: 0x1a1a2a,        // Subtle grid lines
-    BULLET: 0xffffaa       // Bright tracer
+    BULLET: 0xffffaa,      // Bright tracer
+    IR_LASER: 0xff0000,    // Red IR laser
+    FOV_FRIENDLY: 0x00ff88, // Friendly sight cone
+    FOV_ENEMY: 0xff4444,   // Enemy sight cone
+    DEBUG_MARKER: 0x00ffff, // Cyan debug markers
+    AIRSTRIKE_TARGET: 0xff6600 // Orange airstrike marker
 };
 
 export class Renderer {
@@ -48,6 +53,16 @@ export class Renderer {
         this.explosionMeshes = [];
         this.terrainMeshes = [];
 
+        // Visual overlays
+        this.irLaserMeshes = new Map();      // IR lasers (always visible)
+        this.hostileBoxMeshes = new Map();   // Red boxes around hostiles (always visible)
+        this.fovMeshes = new Map();          // Debug: sight cones
+        this.destinationMarkers = new Map(); // Debug: movement destinations
+        this.airstrikeMarker = null;         // Debug: airstrike target
+
+        // Debug mode
+        this.debugMode = false;
+
         // Materials (reusable)
         this.materials = {
             friendly: new THREE.MeshBasicMaterial({ color: COLORS.HOT }),
@@ -63,6 +78,40 @@ export class Renderer {
                 color: COLORS.GRID,
                 transparent: true,
                 opacity: 0.3
+            }),
+            irLaser: new THREE.LineBasicMaterial({
+                color: COLORS.IR_LASER,
+                transparent: true,
+                opacity: 0.8,
+                linewidth: 2
+            }),
+            hostileBox: new THREE.LineBasicMaterial({
+                color: COLORS.ENEMY,
+                transparent: true,
+                opacity: 0.9,
+                linewidth: 2
+            }),
+            fovFriendly: new THREE.MeshBasicMaterial({
+                color: COLORS.FOV_FRIENDLY,
+                transparent: true,
+                opacity: 0.15,
+                side: THREE.DoubleSide
+            }),
+            fovEnemy: new THREE.MeshBasicMaterial({
+                color: COLORS.FOV_ENEMY,
+                transparent: true,
+                opacity: 0.15,
+                side: THREE.DoubleSide
+            }),
+            destinationMarker: new THREE.MeshBasicMaterial({
+                color: COLORS.DEBUG_MARKER,
+                transparent: true,
+                opacity: 0.6
+            }),
+            airstrikeMarker: new THREE.MeshBasicMaterial({
+                color: COLORS.AIRSTRIKE_TARGET,
+                transparent: true,
+                opacity: 0.5
             })
         };
 
@@ -70,7 +119,9 @@ export class Renderer {
         this.geometries = {
             unit: this.createUnitGeometry(),
             bullet: new THREE.SphereGeometry(0.2, 8, 8),
-            explosion: new THREE.CircleGeometry(1, 32)
+            explosion: new THREE.CircleGeometry(1, 32),
+            destinationMarker: this.createDestinationMarkerGeometry(),
+            hostileBox: this.createHostileBoxGeometry()
         };
 
         this.setupGrid();
@@ -90,6 +141,63 @@ export class Renderer {
         const geometry = new THREE.ShapeGeometry(shape);
         geometry.rotateX(-Math.PI / 2);
         return geometry;
+    }
+
+    createDestinationMarkerGeometry() {
+        // Diamond shape for destination marker
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 1.5);
+        shape.lineTo(1, 0);
+        shape.lineTo(0, -1.5);
+        shape.lineTo(-1, 0);
+        shape.closePath();
+
+        const geometry = new THREE.ShapeGeometry(shape);
+        geometry.rotateX(-Math.PI / 2);
+        return geometry;
+    }
+
+    createHostileBoxGeometry() {
+        // Create a box outline geometry
+        const size = 2.5;
+        const points = [
+            new THREE.Vector3(-size, 0, -size),
+            new THREE.Vector3(size, 0, -size),
+            new THREE.Vector3(size, 0, size),
+            new THREE.Vector3(-size, 0, size),
+            new THREE.Vector3(-size, 0, -size)
+        ];
+        return new THREE.BufferGeometry().setFromPoints(points);
+    }
+
+    createFOVGeometry(fovAngle, range) {
+        // Create pie slice geometry for field of view
+        const segments = 24;
+        const shape = new THREE.Shape();
+
+        shape.moveTo(0, 0);
+
+        const halfAngle = fovAngle / 2;
+        for (let i = 0; i <= segments; i++) {
+            const angle = -halfAngle + (fovAngle * i / segments);
+            const x = Math.sin(angle) * range;
+            const y = Math.cos(angle) * range;
+            shape.lineTo(x, y);
+        }
+
+        shape.lineTo(0, 0);
+
+        const geometry = new THREE.ShapeGeometry(shape);
+        geometry.rotateX(-Math.PI / 2);
+        return geometry;
+    }
+
+    createIRLaserGeometry(length) {
+        const points = [
+            new THREE.Vector3(0, 0.3, 0),
+            new THREE.Vector3(0, 0.3, length)
+        ];
+        return new THREE.BufferGeometry().setFromPoints(points);
     }
 
     setupGrid() {
@@ -140,6 +248,43 @@ export class Renderer {
         });
     }
 
+    // Toggle debug mode
+    toggleDebugMode() {
+        this.debugMode = !this.debugMode;
+
+        // Update visibility of debug elements
+        this.fovMeshes.forEach(mesh => {
+            mesh.visible = this.debugMode;
+        });
+
+        this.destinationMarkers.forEach(mesh => {
+            mesh.visible = this.debugMode;
+        });
+
+        if (this.airstrikeMarker) {
+            this.airstrikeMarker.visible = this.debugMode;
+        }
+
+        return this.debugMode;
+    }
+
+    // Set debug mode directly
+    setDebugMode(enabled) {
+        this.debugMode = enabled;
+
+        this.fovMeshes.forEach(mesh => {
+            mesh.visible = this.debugMode;
+        });
+
+        this.destinationMarkers.forEach(mesh => {
+            mesh.visible = this.debugMode;
+        });
+
+        if (this.airstrikeMarker) {
+            this.airstrikeMarker.visible = this.debugMode;
+        }
+    }
+
     // Convert grid coordinate (e.g., "C5") to world position
     gridToWorld(gridCoord) {
         const col = gridCoord.charAt(0).toUpperCase();
@@ -170,8 +315,9 @@ export class Renderer {
         return this.gridInfo.columns[colIndex] + this.gridInfo.rows[rowIndex];
     }
 
-    // Add or update a unit
+    // Add or update a unit with all visual elements
     updateUnit(unit) {
+        // Update main unit mesh
         let mesh = this.unitMeshes.get(unit.id);
 
         if (!mesh) {
@@ -198,14 +344,275 @@ export class Renderer {
             mesh.material.color.setHex(COLORS.HOT);
             mesh.scale.set(1.5, 1, 1.5);
         }
+
+        // Update IR laser (always visible for living units)
+        this.updateIRLaser(unit);
+
+        // Update hostile box (always visible for enemies)
+        if (unit.isEnemy) {
+            this.updateHostileBox(unit);
+        }
+
+        // Update FOV cone (debug only)
+        this.updateFOV(unit);
+
+        // Update destination marker (debug only, for friendlies with targets)
+        if (!unit.isEnemy) {
+            this.updateDestinationMarker(unit);
+        }
+    }
+
+    // Update IR laser beam from unit
+    updateIRLaser(unit) {
+        let laserLine = this.irLaserMeshes.get(unit.id);
+
+        if (!laserLine) {
+            const geometry = this.createIRLaserGeometry(unit.sightRange || 30);
+            laserLine = new THREE.Line(geometry, this.materials.irLaser.clone());
+            this.scene.add(laserLine);
+            this.irLaserMeshes.set(unit.id, laserLine);
+        }
+
+        laserLine.position.set(unit.x, 0, unit.z);
+        laserLine.rotation.y = -unit.rotation;
+        laserLine.visible = unit.alive;
+
+        // Flicker effect for IR laser
+        const flicker = 0.6 + Math.random() * 0.4;
+        laserLine.material.opacity = flicker * 0.8;
+    }
+
+    // Update red box around hostile
+    updateHostileBox(unit) {
+        let boxLine = this.hostileBoxMeshes.get(unit.id);
+
+        if (!boxLine) {
+            boxLine = new THREE.Line(this.geometries.hostileBox.clone(), this.materials.hostileBox.clone());
+            this.scene.add(boxLine);
+            this.hostileBoxMeshes.set(unit.id, boxLine);
+        }
+
+        boxLine.position.set(unit.x, 0.15, unit.z);
+        boxLine.visible = unit.alive;
+
+        // Pulsing effect
+        const pulse = 0.7 + Math.sin(Date.now() * 0.005) * 0.3;
+        boxLine.material.opacity = pulse;
+    }
+
+    // Update FOV cone (debug visual)
+    updateFOV(unit) {
+        let fovMesh = this.fovMeshes.get(unit.id);
+
+        if (!fovMesh) {
+            const fovAngle = unit.fovAngle || (Math.PI / 2.5);
+            const range = unit.sightRange || 30;
+            const geometry = this.createFOVGeometry(fovAngle, range);
+            const material = unit.isEnemy ?
+                this.materials.fovEnemy.clone() :
+                this.materials.fovFriendly.clone();
+
+            fovMesh = new THREE.Mesh(geometry, material);
+            this.scene.add(fovMesh);
+            this.fovMeshes.set(unit.id, fovMesh);
+        }
+
+        fovMesh.position.set(unit.x, 0.05, unit.z);
+        fovMesh.rotation.y = -unit.rotation;
+        fovMesh.visible = this.debugMode && unit.alive;
+
+        // Subtle animation for FOV sweep effect
+        const sweep = Math.sin(Date.now() * 0.002) * 0.05;
+        fovMesh.material.opacity = 0.12 + sweep;
+    }
+
+    // Update destination marker (debug visual)
+    updateDestinationMarker(unit) {
+        let marker = this.destinationMarkers.get(unit.id);
+
+        const hasDestination = unit.targetX !== null && unit.targetZ !== null;
+
+        if (!marker) {
+            marker = new THREE.Mesh(
+                this.geometries.destinationMarker,
+                this.materials.destinationMarker.clone()
+            );
+            this.scene.add(marker);
+            this.destinationMarkers.set(unit.id, marker);
+        }
+
+        if (hasDestination) {
+            marker.position.set(unit.targetX, 0.1, unit.targetZ);
+            marker.visible = this.debugMode;
+
+            // Pulsing animation
+            const pulse = 0.8 + Math.sin(Date.now() * 0.008) * 0.2;
+            marker.scale.set(pulse, 1, pulse);
+            marker.material.opacity = 0.4 + Math.sin(Date.now() * 0.006) * 0.2;
+
+            // Draw line from unit to destination
+            this.updatePathLine(unit);
+        } else {
+            marker.visible = false;
+            this.removePathLine(unit.id);
+        }
+    }
+
+    // Path line from unit to destination
+    updatePathLine(unit) {
+        const lineId = `path_${unit.id}`;
+        let line = this.scene.getObjectByName(lineId);
+
+        if (!line) {
+            const material = new THREE.LineDashedMaterial({
+                color: COLORS.DEBUG_MARKER,
+                transparent: true,
+                opacity: 0.5,
+                dashSize: 1,
+                gapSize: 0.5
+            });
+            const geometry = new THREE.BufferGeometry();
+            line = new THREE.Line(geometry, material);
+            line.name = lineId;
+            this.scene.add(line);
+        }
+
+        const points = [
+            new THREE.Vector3(unit.x, 0.1, unit.z),
+            new THREE.Vector3(unit.targetX, 0.1, unit.targetZ)
+        ];
+        line.geometry.setFromPoints(points);
+        line.computeLineDistances();
+        line.visible = this.debugMode;
+    }
+
+    removePathLine(unitId) {
+        const lineId = `path_${unitId}`;
+        const line = this.scene.getObjectByName(lineId);
+        if (line) {
+            line.visible = false;
+        }
+    }
+
+    // Set airstrike target marker (debug visual)
+    setAirstrikeTarget(x, z, radius) {
+        if (!this.airstrikeMarker) {
+            // Create airstrike target marker - concentric circles
+            const group = new THREE.Group();
+
+            // Outer circle
+            const outerGeometry = new THREE.RingGeometry(radius - 0.5, radius, 32);
+            outerGeometry.rotateX(-Math.PI / 2);
+            const outerMesh = new THREE.Mesh(outerGeometry, this.materials.airstrikeMarker.clone());
+            group.add(outerMesh);
+
+            // Inner circle
+            const innerGeometry = new THREE.RingGeometry(radius * 0.4, radius * 0.5, 32);
+            innerGeometry.rotateX(-Math.PI / 2);
+            const innerMesh = new THREE.Mesh(innerGeometry, this.materials.airstrikeMarker.clone());
+            group.add(innerMesh);
+
+            // Center dot
+            const centerGeometry = new THREE.CircleGeometry(0.5, 16);
+            centerGeometry.rotateX(-Math.PI / 2);
+            const centerMesh = new THREE.Mesh(centerGeometry, this.materials.airstrikeMarker.clone());
+            group.add(centerMesh);
+
+            // Cross hairs
+            const crossMaterial = new THREE.LineBasicMaterial({
+                color: COLORS.AIRSTRIKE_TARGET,
+                transparent: true,
+                opacity: 0.7
+            });
+
+            const hPoints = [
+                new THREE.Vector3(-radius, 0, 0),
+                new THREE.Vector3(radius, 0, 0)
+            ];
+            const hGeometry = new THREE.BufferGeometry().setFromPoints(hPoints);
+            const hLine = new THREE.Line(hGeometry, crossMaterial);
+            group.add(hLine);
+
+            const vPoints = [
+                new THREE.Vector3(0, 0, -radius),
+                new THREE.Vector3(0, 0, radius)
+            ];
+            const vGeometry = new THREE.BufferGeometry().setFromPoints(vPoints);
+            const vLine = new THREE.Line(vGeometry, crossMaterial);
+            group.add(vLine);
+
+            this.airstrikeMarker = group;
+            this.scene.add(this.airstrikeMarker);
+        }
+
+        this.airstrikeMarker.position.set(x, 0.2, z);
+        this.airstrikeMarker.visible = this.debugMode;
+
+        // Store for radius updates
+        this.airstrikeMarker.userData = { x, z, radius };
+    }
+
+    // Clear airstrike target marker
+    clearAirstrikeTarget() {
+        if (this.airstrikeMarker) {
+            this.airstrikeMarker.visible = false;
+        }
+    }
+
+    // Update airstrike marker animation
+    updateAirstrikeMarker() {
+        if (this.airstrikeMarker && this.airstrikeMarker.visible) {
+            // Rotation animation
+            this.airstrikeMarker.rotation.y += 0.02;
+
+            // Pulsing animation
+            const pulse = 0.8 + Math.sin(Date.now() * 0.01) * 0.2;
+            this.airstrikeMarker.children.forEach(child => {
+                if (child.material) {
+                    child.material.opacity = pulse * 0.6;
+                }
+            });
+        }
     }
 
     removeUnit(unitId) {
+        // Remove main mesh
         const mesh = this.unitMeshes.get(unitId);
         if (mesh) {
             this.scene.remove(mesh);
             this.unitMeshes.delete(unitId);
         }
+
+        // Remove IR laser
+        const laser = this.irLaserMeshes.get(unitId);
+        if (laser) {
+            this.scene.remove(laser);
+            this.irLaserMeshes.delete(unitId);
+        }
+
+        // Remove hostile box
+        const box = this.hostileBoxMeshes.get(unitId);
+        if (box) {
+            this.scene.remove(box);
+            this.hostileBoxMeshes.delete(unitId);
+        }
+
+        // Remove FOV
+        const fov = this.fovMeshes.get(unitId);
+        if (fov) {
+            this.scene.remove(fov);
+            this.fovMeshes.delete(unitId);
+        }
+
+        // Remove destination marker
+        const dest = this.destinationMarkers.get(unitId);
+        if (dest) {
+            this.scene.remove(dest);
+            this.destinationMarkers.delete(unitId);
+        }
+
+        // Remove path line
+        this.removePathLine(unitId);
     }
 
     // Add terrain elements
@@ -338,6 +745,7 @@ export class Renderer {
     render(deltaTime) {
         this.updateBullets(deltaTime);
         this.updateExplosions(deltaTime);
+        this.updateAirstrikeMarker();
         this.renderer.render(this.scene, this.camera);
     }
 
@@ -353,6 +761,11 @@ export class Renderer {
         const worldZ = -y * viewSize + this.camera.position.z;
 
         return this.worldToGrid(worldX, worldZ);
+    }
+
+    // Check if debug mode is enabled
+    isDebugMode() {
+        return this.debugMode;
     }
 }
 

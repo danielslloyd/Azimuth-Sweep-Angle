@@ -21,12 +21,14 @@ class Game {
         this.gridPosDisplay = document.getElementById('grid-pos');
         this.squadStatusDisplay = document.getElementById('squad-status');
         this.airstrikeStatusDisplay = document.getElementById('airstrike-status');
+        this.debugStatusDisplay = document.getElementById('debug-status');
         this.instructionsPanel = document.getElementById('instructions');
         this.startButton = document.getElementById('start-btn');
 
         // Game state
         this.isRunning = false;
         this.lastTime = performance.now();
+        this.debugMode = false;
 
         // Server connection status
         this.serverConnected = false;
@@ -144,6 +146,14 @@ class Game {
             this.renderer.updateUnit(unit);
         });
 
+        // Update airstrike target marker if pending
+        if (this.gameState.pendingAirstrike) {
+            const strike = this.gameState.pendingAirstrike;
+            this.renderer.setAirstrikeTarget(strike.x, strike.z, strike.radius);
+        } else {
+            this.renderer.clearAirstrikeTarget();
+        }
+
         // Update UI
         this.updateUI();
 
@@ -161,6 +171,12 @@ class Game {
 
         // Update airstrike status
         this.airstrikeStatusDisplay.textContent = this.gameState.getAirstrikeStatus();
+
+        // Update debug status
+        if (this.debugStatusDisplay) {
+            this.debugStatusDisplay.textContent = this.debugMode ? 'ON' : 'OFF';
+            this.debugStatusDisplay.style.color = this.debugMode ? '#00ffff' : '#666';
+        }
 
         // Update voice indicator
         const inputState = this.inputHandler.getState();
@@ -445,6 +461,13 @@ class Game {
                 break;
             case 'ArrowRight':
                 this.renderer.panCamera(panSpeed, 0);
+                break;
+            case 'd':
+            case 'D':
+                // Toggle debug mode
+                this.debugMode = this.renderer.toggleDebugMode();
+                this.showFeedback(`Debug mode: ${this.debugMode ? 'ON' : 'OFF'}`);
+                setTimeout(() => this.hideFeedback(), 1500);
                 break;
         }
     }

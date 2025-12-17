@@ -42,6 +42,10 @@ export class Unit {
         // Behaviors
         this.holdPosition = false;
         this.engageOnSight = true;
+
+        // Vision/FOV
+        this.fovAngle = Math.PI / 2.5; // ~72 degrees field of view
+        this.sightRange = 30; // Visual range in units
     }
 
     // Move towards target
