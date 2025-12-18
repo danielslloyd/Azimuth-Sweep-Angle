@@ -1,0 +1,14 @@
+{
+  "name": "project-overwatch-client",
+  "version": "0.1.0",
+  "description": "Voice-controlled tactical overwatch game",
+  "type": "module",
+  "scripts": {
+    "dev": "npx http-server public -p 3000 -c-1 --cors",
+    "start": "npx http-server public -p 3000"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}
