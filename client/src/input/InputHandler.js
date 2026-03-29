@@ -1,4 +1,7 @@
 // Input Handler - Manages voice input and keyboard shortcuts
+import { debugFeed } from '../debug/DebugFeed.js';
+
+debugFeed.log('INIT', 'InputHandler module loaded');
 
 export const InputState = {
     IDLE: 'idle',
@@ -30,6 +33,7 @@ export class InputHandler {
     }
 
     setupEventListeners() {
+        debugFeed.log('INPUT', 'Registering event listeners: keydown, keyup, mousemove, wheel');
         // Keyboard events
         document.addEventListener('keydown', (e) => this.handleKeyDown(e));
         document.addEventListener('keyup', (e) => this.handleKeyUp(e));
@@ -40,6 +44,7 @@ export class InputHandler {
 
         // Prevent context menu on right click
         document.addEventListener('contextmenu', (e) => e.preventDefault());
+        debugFeed.log('INPUT', `PTT key: SPACE | Other keys: Arrows, D (3D debug), F (feed toggle)`);
     }
 
     handleKeyDown(event) {
@@ -91,30 +96,43 @@ export class InputHandler {
 
     // Start voice input
     startVoiceInput() {
-        if (this.state !== InputState.IDLE) return;
+        if (this.state !== InputState.IDLE) {
+            debugFeed.warn('INPUT', `PTT pressed but state is "${this.state}" (not idle), ignoring`);
+            return;
+        }
 
         this.state = InputState.LISTENING;
         this.isPTTHeld = true;
+        debugFeed.log('INPUT', 'PTT pressed → state: LISTENING');
 
         if (this.onVoiceStart) {
             this.onVoiceStart();
+        } else {
+            debugFeed.error('INPUT', 'onVoiceStart callback not set!');
         }
     }
 
     // Stop voice input
     stopVoiceInput() {
-        if (this.state !== InputState.LISTENING) return;
+        if (this.state !== InputState.LISTENING) {
+            debugFeed.warn('INPUT', `PTT released but state is "${this.state}" (not listening), ignoring`);
+            return;
+        }
 
         this.state = InputState.PROCESSING;
         this.isPTTHeld = false;
+        debugFeed.log('INPUT', 'PTT released → state: PROCESSING');
 
         if (this.onVoiceEnd) {
             this.onVoiceEnd();
+        } else {
+            debugFeed.error('INPUT', 'onVoiceEnd callback not set!');
         }
     }
 
     // Set state back to idle (called after processing complete)
     resetState() {
+        debugFeed.log('INPUT', `resetState() called (was: ${this.state}) → IDLE`);
         this.state = InputState.IDLE;
     }
 
