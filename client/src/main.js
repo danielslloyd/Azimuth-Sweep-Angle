@@ -1,10 +1,54 @@
 // Project Overwatch - Main Entry Point
-import { Renderer } from './rendering/Renderer.js';
-import { GameState, GamePhase } from './game/GameState.js';
-import { AudioManager } from './audio/AudioManager.js';
-import { InputHandler, InputState } from './input/InputHandler.js';
-import { NetworkHandler, ConnectionState } from './net/NetworkHandler.js';
-import { Map01 } from './game/maps/Map01.js';
+import { debugFeed } from './debug/DebugFeed.js';
+
+debugFeed.log('INIT', '=== Project Overwatch starting ===');
+debugFeed.log('INIT', `User agent: ${navigator.userAgent.slice(0, 80)}`);
+debugFeed.log('INIT', `Page URL: ${location.href}`);
+debugFeed.log('INIT', `Protocol: ${location.protocol} (HTTPS required for mic)`);
+
+let Renderer, GameState, GamePhase, AudioManager, InputHandler, InputState, NetworkHandler, ConnectionState, Map01;
+
+try {
+    ({ Renderer } = await import('./rendering/Renderer.js'));
+    debugFeed.log('INIT', 'Renderer module loaded ✓');
+} catch (e) {
+    debugFeed.error('INIT', `Failed to load Renderer: ${e.message}`);
+}
+
+try {
+    ({ GameState, GamePhase } = await import('./game/GameState.js'));
+    debugFeed.log('INIT', 'GameState module loaded ✓');
+} catch (e) {
+    debugFeed.error('INIT', `Failed to load GameState: ${e.message}`);
+}
+
+try {
+    ({ AudioManager } = await import('./audio/AudioManager.js'));
+    debugFeed.log('INIT', 'AudioManager module loaded ✓');
+} catch (e) {
+    debugFeed.error('INIT', `Failed to load AudioManager: ${e.message}`);
+}
+
+try {
+    ({ InputHandler, InputState } = await import('./input/InputHandler.js'));
+    debugFeed.log('INIT', 'InputHandler module loaded ✓');
+} catch (e) {
+    debugFeed.error('INIT', `Failed to load InputHandler: ${e.message}`);
+}
+
+try {
+    ({ NetworkHandler, ConnectionState } = await import('./net/NetworkHandler.js'));
+    debugFeed.log('INIT', 'NetworkHandler module loaded ✓');
+} catch (e) {
+    debugFeed.error('INIT', `Failed to load NetworkHandler: ${e.message}`);
+}
+
+try {
+    ({ Map01 } = await import('./game/maps/Map01.js'));
+    debugFeed.log('INIT', 'Map01 module loaded ✓');
+} catch (e) {
+    debugFeed.error('INIT', `Failed to load Map01: ${e.message}`);
+}
 
 class Game {
     constructor() {
@@ -38,29 +82,73 @@ class Game {
     }
 
     async init() {
+        debugFeed.attach('debug-feed');
+        debugFeed.log('INIT', 'Game.init() starting...');
+
+        // Check critical browser APIs upfront
+        debugFeed.log('INIT', `WebSocket available: ${'WebSocket' in window}`);
+        debugFeed.log('INIT', `MediaRecorder available: ${'MediaRecorder' in window}`);
+        debugFeed.log('INIT', `getUserMedia available: ${!!(navigator.mediaDevices?.getUserMedia)}`);
+        debugFeed.log('INIT', `AudioContext available: ${!!(window.AudioContext || window.webkitAudioContext)}`);
+        debugFeed.log('INIT', `SpeechRecognition available: ${'SpeechRecognition' in window || 'webkitSpeechRecognition' in window}`);
+        debugFeed.log('INIT', `importmap/ES modules: supported`);
+
+        if (!Renderer || !GameState || !AudioManager || !InputHandler || !NetworkHandler || !Map01) {
+            debugFeed.error('INIT', 'One or more modules failed to load — game cannot start. Check errors above.');
+            return;
+        }
+
         // Initialize canvas
         const canvas = document.getElementById('canvas');
-        this.renderer = new Renderer(canvas);
+        if (!canvas) {
+            debugFeed.error('INIT', 'Canvas element #canvas not found in DOM!');
+            return;
+        }
+        debugFeed.log('INIT', `Canvas found: ${canvas.width}x${canvas.height}`);
 
-        // Initialize game state
-        this.gameState = new GameState();
+        try {
+            this.renderer = new Renderer(canvas);
+            debugFeed.log('INIT', 'Renderer instantiated ✓');
+        } catch (e) {
+            debugFeed.error('INIT', `Renderer constructor failed: ${e.message}`);
+        }
 
-        // Initialize audio
-        this.audioManager = new AudioManager();
+        try {
+            this.gameState = new GameState();
+            debugFeed.log('INIT', 'GameState instantiated ✓');
+        } catch (e) {
+            debugFeed.error('INIT', `GameState constructor failed: ${e.message}`);
+        }
 
-        // Initialize input
-        this.inputHandler = new InputHandler();
+        try {
+            this.audioManager = new AudioManager();
+            debugFeed.log('INIT', 'AudioManager instantiated ✓');
+        } catch (e) {
+            debugFeed.error('INIT', `AudioManager constructor failed: ${e.message}`);
+        }
 
-        // Initialize network
-        this.networkHandler = new NetworkHandler();
+        try {
+            this.inputHandler = new InputHandler();
+            debugFeed.log('INIT', 'InputHandler instantiated ✓');
+        } catch (e) {
+            debugFeed.error('INIT', `InputHandler constructor failed: ${e.message}`);
+        }
+
+        try {
+            this.networkHandler = new NetworkHandler();
+            debugFeed.log('INIT', `NetworkHandler instantiated ✓ (target: ${this.networkHandler.serverUrl})`);
+        } catch (e) {
+            debugFeed.error('INIT', `NetworkHandler constructor failed: ${e.message}`);
+        }
 
         // Setup callbacks
         this.setupCallbacks();
+        debugFeed.log('INIT', 'Callbacks registered ✓');
 
         // Setup start button
         this.startButton.addEventListener('click', () => this.startGame());
-
-        console.log('Game initialized');
+        debugFeed.log('INIT', 'Start button listener attached ✓');
+        debugFeed.log('INIT', 'Game.init() complete — waiting for user to click BEGIN MISSION');
     }
 
     setupCallbacks() {
@@ -83,17 +171,23 @@ class Game {
             onConnected: () => {
                 this.serverConnected = true;
                 this.offlineMode = false;
-                console.log('Server connected');
+                debugFeed.log('NET', 'Server connected ✓ — switching to online mode');
             },
             onDisconnected: () => {
                 this.serverConnected = false;
                 this.offlineMode = true;
-                console.log('Server disconnected - using offline mode');
+                debugFeed.warn('NET', 'Server disconnected — falling back to offline/Web Speech mode');
+            },
+            onError: (err) => {
+                debugFeed.error('NET', `Network error callback: ${err?.message || err}`);
             },
             onTranscription: (text) => this.handleTranscription(text),
             onCommandParsed: (command) => this.handleParsedCommand(command),
             onVoiceResponse: (audioData) => this.audioManager.playVoiceResponse(audioData),
-            onDialogue: (text, speaker) => this.showFeedback(text)
+            onDialogue: (text, speaker) => {
+                debugFeed.log('CMD', `Dialogue [${speaker}]: "${text}"`);
+                this.showFeedback(text);
+            }
         });
 
         // Game state callbacks
@@ -104,31 +198,62 @@ class Game {
     }
 
     async startGame() {
+        debugFeed.log('INIT', '--- BEGIN MISSION clicked ---');
+
         // Initialize audio (requires user gesture)
-        await this.audioManager.init();
-        await this.audioManager.resume();
+        debugFeed.log('AUDIO', 'Calling AudioManager.init()...');
+        try {
+            await this.audioManager.init();
+        } catch (e) {
+            debugFeed.error('AUDIO', `audioManager.init() threw: ${e.message}`);
+        }
+
+        debugFeed.log('AUDIO', 'Calling AudioManager.resume()...');
+        try {
+            await this.audioManager.resume();
+        } catch (e) {
+            debugFeed.error('AUDIO', `audioManager.resume() threw: ${e.message}`);
+        }
 
         // Hide instructions
         this.instructionsPanel.classList.add('hidden');
+        debugFeed.log('INIT', 'Instructions panel hidden');
 
         // Try to connect to server
+        debugFeed.log('NET', 'Initiating server connection...');
         this.networkHandler.connect();
 
         // Load map
-        this.gameState.initMission(Map01);
+        debugFeed.log('INIT', `Loading map: ${Map01?.name || 'Map01'}...`);
+        try {
+            this.gameState.initMission(Map01);
+            const units = this.gameState.getAllUnits?.() ?? [];
+            debugFeed.log('INIT', `Map loaded ✓ — ${units.length} units spawned (${units.filter(u => !u.isEnemy).length} friendly, ${units.filter(u => u.isEnemy).length} enemy)`);
+        } catch (e) {
+            debugFeed.error('INIT', `gameState.initMission() failed: ${e.message}`);
+        }
 
         // Add terrain to renderer
-        this.renderer.addTerrain(this.gameState.terrain);
+        debugFeed.log('RENDER', 'Adding terrain to renderer...');
+        try {
+            this.renderer.addTerrain(this.gameState.terrain);
+            debugFeed.log('RENDER', `Terrain added ✓ (${this.gameState.terrain?.length ?? '?'} objects)`);
+        } catch (e) {
+            debugFeed.error('RENDER', `addTerrain() failed: ${e.message}`);
+        }
 
         // Start game loop
         this.isRunning = true;
+        debugFeed.log('INIT', 'Starting game loop at 60fps...');
         this.gameLoop();
 
         // Show initial briefing
-        this.showFeedback(Map01.briefing);
+        const briefing = Map01?.briefing ?? 'Mission started';
+        debugFeed.log('INIT', `Briefing: "${briefing}"`);
+        this.showFeedback(briefing);
         setTimeout(() => this.hideFeedback(), 5000);
 
-        console.log('Game started');
+        debugFeed.log('INIT', '=== Game running ===');
     }
 
     gameLoop() {
@@ -194,30 +319,48 @@ class Game {
 
     // Voice input handlers
     async handleVoiceStart() {
+        debugFeed.log('VOICE', 'handleVoiceStart() — starting microphone recording...');
         const success = await this.audioManager.startRecording();
         if (!success) {
+            debugFeed.error('VOICE', 'startRecording() returned false — mic unavailable or denied');
             this.showFeedback('Microphone access denied');
             this.inputHandler.resetState();
+        } else {
+            debugFeed.log('VOICE', 'Recording started ✓ — hold SPACE and speak');
         }
     }
 
     handleVoiceEnd() {
+        debugFeed.log('VOICE', 'handleVoiceEnd() — stopping recording...');
         this.audioManager.stopRecording();
     }
 
     async handleRecordingComplete(audioBlob) {
+        debugFeed.log('VOICE', `Recording complete: ${audioBlob?.size ?? '?'} bytes, type: "${audioBlob?.type}"`);
+
+        if (!audioBlob || audioBlob.size === 0) {
+            debugFeed.error('VOICE', 'Audio blob is empty — nothing was captured');
+            this.inputHandler.resetState();
+            return;
+        }
+
         if (this.serverConnected) {
-            // Send to server for processing
+            debugFeed.log('VOICE', 'Server connected — sending audio for Whisper STT...');
             await this.networkHandler.sendAudio(audioBlob);
         } else {
-            // Offline mode - use Web Speech API fallback
+            debugFeed.warn('VOICE', `Server not connected (offlineMode=${this.offlineMode}) — trying Web Speech API fallback`);
             this.useWebSpeechFallback();
         }
     }
 
     // Web Speech API fallback for offline mode
     useWebSpeechFallback() {
-        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        const hasSR = ('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window);
+        debugFeed.log('VOICE', `Web Speech API available: ${hasSR}`);
+
+        if (!hasSR) {
+            debugFeed.error('VOICE', 'SpeechRecognition not available — no voice input possible in offline mode');
+            debugFeed.error('VOICE', 'Tip: Chrome/Edge support webkitSpeechRecognition; Firefox does not');
             this.showFeedback('Voice recognition not available');
             this.inputHandler.resetState();
             return;
@@ -229,41 +372,77 @@ class Game {
         recognition.continuous = false;
         recognition.interimResults = false;
         recognition.lang = 'en-US';
+        debugFeed.log('VOICE', 'Web Speech recognition starting (lang: en-US)...');
+
+        recognition.onstart = () => {
+            debugFeed.log('VOICE', 'Web Speech recognition listening...');
+        };
+
+        recognition.onspeechstart = () => {
+            debugFeed.log('VOICE', 'Speech detected by Web Speech API');
+        };
+
+        recognition.onspeechend = () => {
+            debugFeed.log('VOICE', 'Speech ended, processing...');
+        };
 
         recognition.onresult = (event) => {
-            const transcript = event.results[0][0].transcript;
+            const result = event.results[0][0];
+            const transcript = result.transcript;
+            const confidence = result.confidence.toFixed(3);
+            debugFeed.log('VOICE', `Web Speech result: "${transcript}" (confidence: ${confidence})`);
             this.handleTranscription(transcript);
         };
 
+        recognition.onnomatch = () => {
+            debugFeed.warn('VOICE', 'Web Speech: no match found for utterance');
+            this.showFeedback('Could not understand command');
+            this.inputHandler.resetState();
+        };
+
         recognition.onerror = (event) => {
-            console.error('Speech recognition error:', event.error);
+            debugFeed.error('VOICE', `Web Speech error: "${event.error}" — ${event.message || '(no message)'}`);
+            if (event.error === 'not-allowed') {
+                debugFeed.error('VOICE', '→ Microphone permission denied for Web Speech API');
+            } else if (event.error === 'no-speech') {
+                debugFeed.warn('VOICE', '→ No speech detected (too quiet or too short)');
+            } else if (event.error === 'network') {
+                debugFeed.error('VOICE', '→ Network error (Web Speech needs Google servers)');
+            }
             this.showFeedback('Could not understand command');
             this.inputHandler.resetState();
         };
 
         recognition.onend = () => {
-            if (this.inputHandler.getState() === InputState.PROCESSING) {
-                // Already processed
-            }
+            debugFeed.log('VOICE', 'Web Speech recognition session ended');
         };
 
-        recognition.start();
+        try {
+            recognition.start();
+            debugFeed.log('VOICE', 'Web Speech recognition.start() called');
+        } catch (e) {
+            debugFeed.error('VOICE', `recognition.start() threw: ${e.message}`);
+            this.inputHandler.resetState();
+        }
     }
 
     // Handle transcribed text
     handleTranscription(text) {
-        console.log('Transcription:', text);
+        debugFeed.log('VOICE', `=== TRANSCRIPTION: "${text}" ===`);
         this.showFeedback(`"${text}"`);
 
         if (this.serverConnected) {
-            // Server will parse and send command
+            debugFeed.log('CMD', `Sending text to server for NLP parsing: "${text}"`);
             this.networkHandler.sendTextCommand(text);
         } else {
-            // Parse locally
+            debugFeed.log('CMD', `Parsing locally (offline mode): "${text}"`);
             const command = this.parseCommandLocally(text);
             if (command) {
+                debugFeed.log('CMD', `Local parse result: action="${command.action}", targets="${command.targets}", grid=${JSON.stringify(command.gridCoord)}`);
                 this.handleParsedCommand(command);
             } else {
+                debugFeed.warn('CMD', `Local parser could not parse: "${text}"`);
+                debugFeed.warn('CMD', 'Try: "Alpha move to grid C5", "Call airstrike on grid D7", "Hold position"');
                 this.showFeedback('Command not understood');
             }
         }
@@ -328,9 +507,17 @@ class Game {
 
     // Handle parsed command from server or local parser
     handleParsedCommand(command) {
-        console.log('Executing command:', command);
+        debugFeed.log('CMD', `Executing: action="${command.action}" targets="${command.targets}" grid=${JSON.stringify(command.gridCoord)} params=${JSON.stringify(command.params ?? {})}`);
 
-        const result = this.gameState.issueCommand(command);
+        let result;
+        try {
+            result = this.gameState.issueCommand(command);
+        } catch (e) {
+            debugFeed.error('CMD', `issueCommand() threw: ${e.message}`);
+            return;
+        }
+
+        debugFeed.log('CMD', `Command result: success=${result.success}, message="${result.message}"`);
 
         // Show result feedback
         if (result.success) {
@@ -339,32 +526,23 @@ class Game {
             // Generate response based on action
             let response = '';
             switch (command.action) {
-                case 'move':
-                    response = 'Copy, moving to position.';
-                    break;
-                case 'hold':
-                    response = 'Roger, holding position.';
-                    break;
-                case 'engage':
-                    response = 'Copy, engaging targets.';
-                    break;
-                case 'cease_fire':
-                    response = 'Copy, holding fire.';
-                    break;
-                case 'airstrike':
-                    response = result.message;
-                    break;
-                default:
-                    response = 'Copy.';
+                case 'move':       response = 'Copy, moving to position.'; break;
+                case 'hold':       response = 'Roger, holding position.'; break;
+                case 'engage':     response = 'Copy, engaging targets.'; break;
+                case 'cease_fire': response = 'Copy, holding fire.'; break;
+                case 'airstrike':  response = result.message; break;
+                default:           response = 'Copy.';
             }
 
             this.showFeedback(response);
 
             // Request TTS if connected
             if (this.serverConnected) {
+                debugFeed.log('CMD', `Requesting TTS for: "${response}"`);
                 this.networkHandler.requestVoice(response);
             }
         } else {
+            debugFeed.warn('CMD', `Command failed: ${result.message}`);
             this.showFeedback(result.message);
         }
 
@@ -373,11 +551,11 @@ class Game {
 
     // Game event handlers
     handleUnitKilled(unit) {
-        console.log(`${unit.callsign} killed`);
-
         if (unit.isEnemy) {
+            debugFeed.log('CMD', `Enemy killed at (${unit.x?.toFixed(1)}, ${unit.z?.toFixed(1)})`);
             this.showFeedback(`Tango down`);
         } else {
+            debugFeed.warn('CMD', `Friendly ${unit.callsign} killed!`);
             this.showFeedback(`${unit.callsign} is down!`);
         }
 
@@ -390,7 +568,7 @@ class Game {
     }
 
     handleAirstrikeImpact(strike) {
-        console.log('Airstrike impact:', strike);
+        debugFeed.log('CMD', `Airstrike impact: type=${strike.type}, pos=(${strike.x?.toFixed(1)}, ${strike.z?.toFixed(1)}), radius=${strike.radius}`);
         this.audioManager.playExplosion(strike.x);
         this.renderer.addExplosion(strike.x, strike.z, strike.radius);
 
@@ -416,6 +594,7 @@ class Game {
 
     handleGameOver(result) {
         this.isRunning = false;
+        debugFeed.log('INIT', `=== GAME OVER: ${result.toUpperCase()} ===`);
 
         if (result === 'victory') {
             this.showFeedback('MISSION COMPLETE - All hostiles eliminated');
@@ -464,10 +643,17 @@ class Game {
                 break;
             case 'd':
             case 'D':
-                // Toggle debug mode
+                // Toggle 3D debug mode
                 this.debugMode = this.renderer.toggleDebugMode();
+                debugFeed.log('RENDER', `3D debug mode: ${this.debugMode ? 'ON' : 'OFF'}`);
                 this.showFeedback(`Debug mode: ${this.debugMode ? 'ON' : 'OFF'}`);
                 setTimeout(() => this.hideFeedback(), 1500);
+                break;
+            case 'f':
+            case 'F':
+                // Toggle debug feed panel
+                const feedVisible = debugFeed.toggle();
+                debugFeed.log('INFO', `Debug feed panel: ${feedVisible ? 'shown' : 'hidden'}`);
                 break;
         }
     }

@@ -110,6 +110,98 @@
             background: #00ff00;
             color: #000;
         }
+
+        /* ── Debug Feed ───────────────────────────────────────── */
+        #debug-feed {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            width: 430px;
+            height: calc(100vh - 20px);
+            background: rgba(0, 0, 0, 0.88);
+            border: 1px solid #1a1a1a;
+            border-left: 2px solid #00ff00;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            display: flex;
+            flex-direction: column;
+            z-index: 300;
+            pointer-events: auto;
+        }
+        #debug-feed.hidden { display: none !important; }
+
+        .debug-feed-header {
+            padding: 5px 10px;
+            border-bottom: 1px solid #1c1c1c;
+            color: #00ff00;
+            font-size: 11px;
+            letter-spacing: 2px;
+            flex-shrink: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0,20,0,0.6);
+            user-select: none;
+        }
+        .debug-feed-header span { font-size: 10px; letter-spacing: 0; }
+        .debug-feed-count {
+            color: #555;
+            font-size: 10px;
+            letter-spacing: 0;
+        }
+        .debug-feed-key {
+            color: #444;
+            font-size: 10px;
+        }
+        .debug-feed-scroll {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            scroll-behavior: auto;
+        }
+        .debug-feed-scroll::-webkit-scrollbar {
+            width: 4px;
+        }
+        .debug-feed-scroll::-webkit-scrollbar-track {
+            background: #111;
+        }
+        .debug-feed-scroll::-webkit-scrollbar-thumb {
+            background: #333;
+        }
+        .debug-feed-list {
+            padding: 4px 8px 8px;
+        }
+        .debug-entry {
+            padding: 1px 0;
+            line-height: 1.5;
+            word-break: break-all;
+            border-bottom: 1px solid rgba(255,255,255,0.02);
+        }
+        .debug-entry.debug-error { background: rgba(255,40,40,0.08); }
+        .debug-entry.debug-warn  { background: rgba(255,170,0,0.06); }
+        .debug-ts  { color: #444; font-size: 10px; }
+        .debug-cat { font-weight: bold; font-size: 10px; }
+        .debug-msg { color: #ccc; }
+        .debug-entry.debug-error .debug-msg { color: #ff8888; }
+        .debug-entry.debug-warn  .debug-msg { color: #ffcc88; }
+
+        /* Category legend pills */
+        .debug-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            padding: 5px 8px;
+            border-top: 1px solid #1c1c1c;
+            background: rgba(0,0,0,0.5);
+            flex-shrink: 0;
+        }
+        .debug-legend-item {
+            font-size: 9px;
+            padding: 1px 5px;
+            border-radius: 2px;
+            opacity: 0.75;
+            letter-spacing: 0.5px;
+        }
     </style>
 </head>
 <body>
@@ -124,7 +216,7 @@
         <p>Example: "Alpha, move to grid C5"</p>
         <p>Example: "Call airstrike on grid D7"</p>
         <p style="margin-top: 20px; font-size: 12px; opacity: 0.6;">
-            SPACE: Talk | D: Debug | Arrows: Pan | Scroll: Zoom
+            SPACE: Talk | D: 3D Debug | F: Feed Toggle | Arrows: Pan | Scroll: Zoom
         </p>
         <button id="start-btn">BEGIN MISSION</button>
     </div>
@@ -138,6 +230,28 @@
 
     <div id="command-feedback"></div>
     <div id="voice-indicator">PRESS SPACE TO SPEAK</div>
+
+    <!-- Debug Feed Panel -->
+    <div id="debug-feed">
+        <div class="debug-feed-header">
+            <span>◈ DEBUG FEED</span>
+            <span class="debug-feed-count">0 entries</span>
+            <span class="debug-feed-key">[F] toggle</span>
+        </div>
+        <div class="debug-feed-scroll">
+            <div class="debug-feed-list" id="debug-feed-list"></div>
+        </div>
+        <div class="debug-legend">
+            <span class="debug-legend-item" style="color:#00aaff;border:1px solid #00aaff">INIT</span>
+            <span class="debug-legend-item" style="color:#ff8800;border:1px solid #ff8800">VOICE</span>
+            <span class="debug-legend-item" style="color:#00ff88;border:1px solid #00ff88">NET</span>
+            <span class="debug-legend-item" style="color:#ffff44;border:1px solid #ffff44">AUDIO</span>
+            <span class="debug-legend-item" style="color:#ff44ff;border:1px solid #ff44ff">CMD</span>
+            <span class="debug-legend-item" style="color:#44ddff;border:1px solid #44ddff">INPUT</span>
+            <span class="debug-legend-item" style="color:#ff3333;border:1px solid #ff3333">ERROR</span>
+            <span class="debug-legend-item" style="color:#ffaa00;border:1px solid #ffaa00">WARN</span>
+        </div>
+    </div>
 
     <script type="importmap">
     {

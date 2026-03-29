@@ -1,4 +1,7 @@
 // Audio Manager - Handles sound effects and voice playback
+import { debugFeed } from '../debug/DebugFeed.js';
+
+debugFeed.log('INIT', 'AudioManager module loaded');
 
 export class AudioManager {
     constructor() {
@@ -22,37 +25,47 @@ export class AudioManager {
 
     // Initialize audio context (must be called from user gesture)
     async init() {
-        if (this.isInitialized) return;
+        if (this.isInitialized) {
+            debugFeed.log('AUDIO', 'init() called but already initialized, skipping');
+            return;
+        }
+
+        debugFeed.log('AUDIO', 'Initializing AudioContext...');
 
         try {
-            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) {
+                debugFeed.error('AUDIO', 'AudioContext API not available in this browser');
+                return;
+            }
+            debugFeed.log('AUDIO', `Using ${window.AudioContext ? 'AudioContext' : 'webkitAudioContext'}`);
+
+            this.audioContext = new AudioCtx();
+            debugFeed.log('AUDIO', `AudioContext created, state: ${this.audioContext.state}`);
+
             this.gainNode = this.audioContext.createGain();
             this.gainNode.connect(this.audioContext.destination);
             this.gainNode.gain.value = 0.5;
+            debugFeed.log('AUDIO', 'GainNode connected to destination');
 
             // Generate procedural sounds
             await this.generateSounds();
 
             this.isInitialized = true;
-            console.log('AudioManager initialized');
+            debugFeed.log('AUDIO', 'AudioManager fully initialized ✓');
         } catch (error) {
-            console.error('Failed to initialize AudioManager:', error);
+            debugFeed.error('AUDIO', `init() failed: ${error.message}`);
         }
     }
 
     // Generate procedural sound effects
     async generateSounds() {
-        // Gunshot sound
-        this.sounds.gunshot = this.createGunshot();
-
-        // Explosion sound
-        this.sounds.explosion = this.createExplosion();
-
-        // Radio click
+        debugFeed.log('AUDIO', 'Generating procedural sound buffers...');
+        this.sounds.gunshot    = this.createGunshot();
+        this.sounds.explosion  = this.createExplosion();
         this.sounds.radioClick = this.createRadioClick();
-
-        // Confirmation beep
-        this.sounds.confirm = this.createConfirmBeep();
+        this.sounds.confirm    = this.createConfirmBeep();
+        debugFeed.log('AUDIO', `Sound buffers created: ${Object.keys(this.sounds).join(', ')}`);
     }
 
     // Create gunshot sound
@@ -174,6 +187,7 @@ export class AudioManager {
 
     // Queue and play AI voice response
     async playVoiceResponse(audioData) {
+        debugFeed.log('AUDIO', `Voice response queued (${audioData?.byteLength ?? '?'} bytes), queue length: ${this.voiceQueue.length + 1}`);
         this.voiceQueue.push(audioData);
 
         if (!this.isPlayingVoice) {
@@ -190,6 +204,7 @@ export class AudioManager {
 
         this.isPlayingVoice = true;
         const audioData = this.voiceQueue.shift();
+        debugFeed.log('AUDIO', `Decoding TTS audio (${audioData?.byteLength ?? '?'} bytes)...`);
 
         try {
             // Play radio click before voice
@@ -198,44 +213,79 @@ export class AudioManager {
 
             // Decode and play voice
             const audioBuffer = await this.audioContext.decodeAudioData(audioData);
+            debugFeed.log('AUDIO', `TTS decoded: ${audioBuffer.duration.toFixed(2)}s, ${audioBuffer.numberOfChannels}ch @ ${audioBuffer.sampleRate}Hz`);
             const source = this.audioContext.createBufferSource();
             source.buffer = audioBuffer;
             source.connect(this.gainNode);
 
             source.onended = () => {
+                debugFeed.log('AUDIO', 'TTS playback finished');
                 this.processVoiceQueue();
             };
 
             source.start();
         } catch (error) {
-            console.error('Error playing voice:', error);
+            debugFeed.error('AUDIO', `processVoiceQueue() decode/play failed: ${error.message}`);
             this.processVoiceQueue();
         }
     }
 
     // Start recording voice
     async startRecording() {
-        if (this.isRecording) return;
+        if (this.isRecording) {
+            debugFeed.warn('AUDIO', 'startRecording() called but already recording');
+            return;
+        }
+
+        debugFeed.log('AUDIO', 'Requesting microphone via getUserMedia...');
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            debugFeed.error('AUDIO', 'getUserMedia not available — browser may lack mic support or need HTTPS');
+            return false;
+        }
 
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const tracks = stream.getAudioTracks();
+            debugFeed.log('AUDIO', `Microphone granted ✓ — track: "${tracks[0]?.label || 'unknown'}", ${tracks.length} track(s)`);
 
-            this.mediaRecorder = new MediaRecorder(stream, {
-                mimeType: 'audio/webm;codecs=opus'
-            });
+            const mimeType = 'audio/webm;codecs=opus';
+            const supported = MediaRecorder.isTypeSupported(mimeType);
+            debugFeed.log('AUDIO', `MediaRecorder mimeType "${mimeType}" supported: ${supported}`);
+
+            this.mediaRecorder = new MediaRecorder(stream, supported ? { mimeType } : {});
+            debugFeed.log('AUDIO', `MediaRecorder created, actual mimeType: "${this.mediaRecorder.mimeType}"`);
 
             this.audioChunks = [];
 
             this.mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
                     this.audioChunks.push(event.data);
+                    debugFeed.log('AUDIO', `Audio chunk received: ${event.data.size} bytes (total chunks: ${this.audioChunks.length})`);
+                } else {
+                    debugFeed.warn('AUDIO', 'ondataavailable fired but chunk was empty (0 bytes)');
                 }
             };
 
+            this.mediaRecorder.onerror = (event) => {
+                debugFeed.error('AUDIO', `MediaRecorder error: ${event.error?.message || event}`);
+            };
+
             this.mediaRecorder.onstop = () => {
+                const totalBytes = this.audioChunks.reduce((s, c) => s + c.size, 0);
+                debugFeed.log('AUDIO', `Recording stopped — ${this.audioChunks.length} chunks, ${totalBytes} bytes total`);
+
+                if (this.audioChunks.length === 0) {
+                    debugFeed.error('AUDIO', 'No audio chunks captured — recording may have been too short or mic failed');
+                }
+
                 const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+                debugFeed.log('AUDIO', `Blob created: ${audioBlob.size} bytes, type: "${audioBlob.type}"`);
+
                 if (this.onRecordingComplete) {
                     this.onRecordingComplete(audioBlob);
+                } else {
+                    debugFeed.error('AUDIO', 'onRecordingComplete callback not set!');
                 }
 
                 // Stop all tracks
@@ -244,19 +294,29 @@ export class AudioManager {
 
             this.mediaRecorder.start();
             this.isRecording = true;
+            debugFeed.log('AUDIO', `MediaRecorder started, state: "${this.mediaRecorder.state}"`);
             this.playRadioClick();
 
             return true;
         } catch (error) {
-            console.error('Failed to start recording:', error);
+            debugFeed.error('AUDIO', `startRecording() failed: ${error.name}: ${error.message}`);
+            if (error.name === 'NotAllowedError') {
+                debugFeed.error('AUDIO', '→ Microphone permission DENIED by user or browser policy');
+            } else if (error.name === 'NotFoundError') {
+                debugFeed.error('AUDIO', '→ No microphone device found');
+            }
             return false;
         }
     }
 
     // Stop recording voice
     stopRecording() {
-        if (!this.isRecording || !this.mediaRecorder) return;
+        if (!this.isRecording || !this.mediaRecorder) {
+            debugFeed.warn('AUDIO', `stopRecording() called but not recording (isRecording=${this.isRecording}, mediaRecorder=${!!this.mediaRecorder})`);
+            return;
+        }
 
+        debugFeed.log('AUDIO', `Stopping MediaRecorder (state: "${this.mediaRecorder.state}")...`);
         this.mediaRecorder.stop();
         this.isRecording = false;
         this.playRadioClick();
@@ -281,8 +341,16 @@ export class AudioManager {
 
     // Resume audio context (for autoplay policies)
     async resume() {
-        if (this.audioContext && this.audioContext.state === 'suspended') {
+        if (!this.audioContext) {
+            debugFeed.warn('AUDIO', 'resume() called but audioContext is null');
+            return;
+        }
+        debugFeed.log('AUDIO', `AudioContext state before resume: "${this.audioContext.state}"`);
+        if (this.audioContext.state === 'suspended') {
             await this.audioContext.resume();
+            debugFeed.log('AUDIO', `AudioContext resumed, new state: "${this.audioContext.state}"`);
+        } else {
+            debugFeed.log('AUDIO', `AudioContext not suspended, no resume needed (state: "${this.audioContext.state}")`);
         }
     }
 }
