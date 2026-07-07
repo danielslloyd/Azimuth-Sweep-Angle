@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Project Overwatch</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #0a0e14; color: #cbd5e1;
+    font-family: "Consolas", "Menlo", monospace; font-size: 12px;
+    display: flex; height: 100vh; overflow: hidden;
+  }
+  #game-pane {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    min-width: 0;
+  }
+  canvas { background: #0d1117; border: 1px solid #1c2430; max-width: 100%; max-height: 100%; }
+
+  #debug-pane {
+    width: 420px; min-width: 340px; border-left: 1px solid #1c2430;
+    display: flex; flex-direction: column; padding: 8px; gap: 8px;
+    background: #0b0f16; overflow: hidden;
+  }
+  .dbg-section { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .dbg-status { gap: 8px; }
+  .light {
+    padding: 2px 7px; border-radius: 3px; background: #333; color: #999;
+    font-weight: bold; font-size: 10px; letter-spacing: 1px;
+  }
+  .light.ok { background: #14532d; color: #7dff9a; }
+  .light.bad { background: #5b1a1a; color: #ff8a8a; }
+  .light.warn { background: #57450f; color: #ffd24d; }
+
+  select, input[type=text], input:not([type]) {
+    background: #131a24; color: #cbd5e1; border: 1px solid #263143;
+    border-radius: 3px; padding: 4px 6px; font: inherit;
+  }
+  #text-cmd, #raw-cmd { width: 100%; }
+  label { display: flex; gap: 4px; align-items: center; }
+
+  .vu-wrap { width: 100%; height: 8px; background: #131a24; border-radius: 4px; overflow: hidden; }
+  #vu-bar { height: 100%; width: 0; background: #444; transition: width 0.05s linear; }
+  #ptt-state { color: #64748b; }
+  #ptt-state.active { color: #ff6a6a; font-weight: bold; }
+  #live-transcript {
+    width: 100%; min-height: 18px; color: #6ee7b7; font-style: italic;
+    border-bottom: 1px solid #1c2430; padding-bottom: 4px;
+  }
+
+  .dbg-toggles { font-size: 11px; color: #94a3b8; }
+
+  .dbg-feed {
+    flex: 1; overflow-y: auto; border-top: 1px solid #1c2430; padding-top: 6px;
+    display: flex; flex-direction: column; gap: 1px;
+  }
+  .feed-row { padding: 1px 2px; line-height: 1.5; word-break: break-word; }
+  .feed-row.err .msg { color: #ff8a8a; }
+  .feed-row.expandable { cursor: pointer; }
+  .feed-row.expandable:hover { background: #131a24; }
+  .ts { color: #475569; margin-right: 6px; }
+  .stage { font-weight: bold; margin-right: 6px; }
+  .src { background: #1e3a5f; color: #7ac7ff; border-radius: 2px; padding: 0 3px; margin-right: 6px; font-size: 10px; }
+  .dur { color: #64748b; }
+  .feed-detail {
+    background: #10151d; border: 1px solid #1c2430; border-radius: 3px;
+    margin: 3px 0 3px 16px; padding: 6px; font-size: 11px; color: #94a3b8;
+    max-height: 240px; overflow: auto; white-space: pre-wrap;
+  }
+  .feed-group { border-left: 2px solid #263143; margin: 3px 0; padding-left: 6px; }
+  .group-hdr { color: #475569; font-size: 10px; }
+</style>
+</head>
+<body>
+  <div id="game-pane"><canvas id="game-canvas"></canvas></div>
+  <div id="debug-pane"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

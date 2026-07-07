@@ -1,124 +1,49 @@
-// First Mission: Village Assault
-// A small village with enemy infantry positions
+// Map 01 — "Compound". 600x600 world, 60px cells, grid A1 (NW) to J10 (SE).
+// Friendlies spawn SW; an enemy patrol loops the center; a guard pair holds
+// the compound in the NE. Mission: clear the compound at H3.
 
-export const Map01 = {
-    name: 'Village Assault',
-    briefing: 'Infiltrate the village and eliminate all hostile forces. Watch for enemy positions in the buildings.',
+export const MAP01 = {
+  name: "Compound",
+  goal: {
+    text: "Clear all hostiles from the compound at grid H3",
+    grid: "H3",
+  },
+  // x,y = top-left, in world px. wall = blocks sight/fire/movement,
+  // cover = low (crates/sandbags): blocks movement, shields adjacent units.
+  obstacles: [
+    // Compound walls (NE, around H2-I3): U-shape open to the south
+    { type: "wall", x: 400, y: 80, w: 150, h: 18, id: "compound-north" },
+    { type: "wall", x: 400, y: 80, w: 18, h: 120, id: "compound-west" },
+    { type: "wall", x: 532, y: 80, w: 18, h: 120, id: "compound-east" },
+    // Center building (~E5/F5)
+    { type: "wall", x: 250, y: 250, w: 110, h: 70, id: "center-building" },
+    // West rock (~B4)
+    { type: "wall", x: 60, y: 190, w: 70, h: 50, id: "west-rock" },
+    // South building (~E8)
+    { type: "wall", x: 240, y: 430, w: 80, h: 60, id: "south-building" },
 
-    // Friendly spawn points (starting positions)
-    friendlySpawns: [
-        { x: -35, z: -35, rotation: Math.PI / 4 },
-        { x: -33, z: -35, rotation: Math.PI / 4 },
-        { x: -35, z: -33, rotation: Math.PI / 4 },
-        { x: -33, z: -33, rotation: Math.PI / 4 }
-    ],
-
-    // Enemy spawn points
-    enemySpawns: [
-        // Village center patrol
-        { x: 0, z: 0, rotation: -Math.PI / 2 },
-        { x: 5, z: 3, rotation: Math.PI },
-
-        // Building positions
-        { x: -10, z: 10, rotation: -Math.PI / 4 },
-        { x: 15, z: -5, rotation: Math.PI / 2 },
-
-        // Eastern flank
-        { x: 25, z: 15, rotation: -Math.PI / 2 },
-        { x: 28, z: 10, rotation: -Math.PI }
-    ],
-
-    // Terrain features
-    terrain: [
-        // Central buildings
-        { type: 'building', x: -5, z: 5, width: 8, height: 6 },
-        { type: 'building', x: 8, z: 0, width: 6, height: 8 },
-        { type: 'building', x: -8, z: -8, width: 5, height: 5 },
-
-        // Trees/vegetation
-        { type: 'tree', x: -20, z: 20, radius: 3 },
-        { type: 'tree', x: -15, z: 25, radius: 2 },
-        { type: 'tree', x: -25, z: 15, radius: 2.5 },
-        { type: 'tree', x: 20, z: 20, radius: 3 },
-        { type: 'tree', x: 25, z: 25, radius: 2 },
-        { type: 'tree', x: 30, z: 18, radius: 2.5 },
-
-        // Cover positions
-        { type: 'cover', x: -15, z: 0, width: 3, height: 1, rotation: 0 },
-        { type: 'cover', x: 0, z: -15, width: 4, height: 1, rotation: Math.PI / 4 },
-        { type: 'cover', x: 15, z: 10, width: 3, height: 1, rotation: -Math.PI / 6 },
-
-        // Road (represented as darker patches)
-        { type: 'building', x: 0, z: -30, width: 4, height: 20 },
-        { type: 'building', x: 0, z: 30, width: 4, height: 20 }
-    ],
-
-    // Grid labels visible on map
-    gridOverlay: true,
-
-    // Objectives (for future use)
-    objectives: [
-        {
-            id: 'eliminate_all',
-            type: 'eliminate',
-            description: 'Eliminate all enemy combatants',
-            target: 'all_enemies'
-        }
-    ]
+    // Scattered low cover (crates / sandbags)
+    { type: "cover", x: 160, y: 350, w: 40, h: 16, id: "crates-c6" },
+    { type: "cover", x: 390, y: 300, w: 40, h: 16, id: "crates-g6" },
+    { type: "cover", x: 450, y: 220, w: 16, h: 40, id: "sandbags-h4" },
+    { type: "cover", x: 300, y: 150, w: 40, h: 16, id: "crates-f3" },
+    { type: "cover", x: 100, y: 480, w: 40, h: 16, id: "crates-b9" },
+    { type: "cover", x: 480, y: 420, w: 40, h: 16, id: "crates-i8" },
+  ],
+  friendlySpawns: [
+    { id: "alpha-1", grid: "B9" },
+    { id: "alpha-2", grid: "A9" },
+    { id: "alpha-3", grid: "B10" },
+    { id: "alpha-4", grid: "A10" },
+  ],
+  enemies: [
+    // Patrol loops around the center building (kept a cell north of the
+    // friendly spawn's vision range so missions don't start with contact)
+    { id: "hostile-1", grid: "D4", patrol: ["D4", "G4", "G6", "D6"] },
+    { id: "hostile-2", grid: "G4", patrol: ["G4", "G6", "D6", "D4"] },
+    { id: "hostile-3", grid: "G6", patrol: ["G6", "D6", "D4", "G4"] },
+    // Compound guards (static posts, facing south)
+    { id: "hostile-4", grid: "H2", patrol: [], facing: "S" },
+    { id: "hostile-5", grid: "I3", patrol: [], facing: "S" },
+  ],
 };
-
-// Second map: Open Field
-export const Map02 = {
-    name: 'Open Field',
-    briefing: 'Enemy forces spotted in the open. This is a good opportunity for an airstrike.',
-
-    friendlySpawns: [
-        { x: -40, z: 0, rotation: 0 },
-        { x: -40, z: 3, rotation: 0 },
-        { x: -40, z: -3, rotation: 0 },
-        { x: -43, z: 0, rotation: 0 }
-    ],
-
-    enemySpawns: [
-        { x: 20, z: 0, rotation: Math.PI },
-        { x: 25, z: 5, rotation: Math.PI },
-        { x: 25, z: -5, rotation: Math.PI },
-        { x: 30, z: 0, rotation: Math.PI },
-        { x: 22, z: 8, rotation: Math.PI },
-        { x: 22, z: -8, rotation: Math.PI },
-        { x: 28, z: 10, rotation: Math.PI },
-        { x: 28, z: -10, rotation: Math.PI }
-    ],
-
-    terrain: [
-        // Sparse cover
-        { type: 'cover', x: -20, z: 0, width: 4, height: 1 },
-        { type: 'cover', x: 0, z: 10, width: 3, height: 1, rotation: Math.PI / 4 },
-        { type: 'cover', x: 0, z: -10, width: 3, height: 1, rotation: -Math.PI / 4 },
-
-        // Few trees
-        { type: 'tree', x: -10, z: 20, radius: 2 },
-        { type: 'tree', x: -10, z: -20, radius: 2 },
-        { type: 'tree', x: 10, z: 25, radius: 3 },
-        { type: 'tree', x: 10, z: -25, radius: 3 }
-    ],
-
-    gridOverlay: true,
-
-    objectives: [
-        {
-            id: 'eliminate_all',
-            type: 'eliminate',
-            description: 'Eliminate all enemy combatants',
-            target: 'all_enemies'
-        }
-    ]
-};
-
-// Export all maps
-export const Maps = {
-    'map01': Map01,
-    'map02': Map02
-};
-
-export default Maps;

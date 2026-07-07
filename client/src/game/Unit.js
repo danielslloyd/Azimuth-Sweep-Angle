@@ -1,222 +1,88 @@
-// Unit states
-export const UnitState = {
-    IDLE: 'idle',
-    MOVING: 'moving',
-    ENGAGING: 'engaging',
-    TAKING_COVER: 'taking_cover',
-    DEAD: 'dead'
-};
+// A soldier (friendly or enemy). Mechanical layer only: movement along a
+// path, turning, vision checks, fire cooldown. Decisions live in SquadAI /
+// EnemyAI.
 
-// Callsigns for squad members
-const CALLSIGNS = ['Alpha-1', 'Alpha-2', 'Alpha-3', 'Alpha-4'];
-const ENEMY_CALLSIGNS = ['Tango', 'Hostile', 'Bogey', 'Contact'];
+import { CONFIG } from "../config.js";
+import { angleTo, canSee, dist, normalizeAngle } from "./LOS.js";
 
 export class Unit {
-    constructor(id, x, z, isEnemy = false) {
-        this.id = id;
-        this.x = x;
-        this.z = z;
-        this.rotation = 0;
-        this.isEnemy = isEnemy;
-        this.alive = true;
-        this.selected = false;
-        this.state = UnitState.IDLE;
+  constructor(id, side, pos, heading = 0) {
+    this.id = id;
+    this.side = side; // "friendly" | "enemy"
+    this.pos = { ...pos };
+    this.heading = heading;
+    this.speed = CONFIG.UNIT_SPEED;
+    this.alive = true;
 
-        // Movement
-        this.targetX = null;
-        this.targetZ = null;
-        this.speed = isEnemy ? 8 : 10; // Units per second
-        this.path = [];
+    this.path = null;         // remaining waypoints
+    this.moveGoal = null;     // final destination (for rendering)
+    this.watchHeading = null; // where to face when stationary
+    this.fireCooldown = 0;
+    this.firing = false;      // engaged a target this tick (renderer hint)
 
-        // Combat
-        this.engagementTarget = null;
-        this.lastFireTime = 0;
-        this.fireRate = isEnemy ? 1.5 : 1.0; // Shots per second
-        this.accuracy = isEnemy ? 0.15 : 0.25; // Hit probability
+    // AI bookkeeping (used by SquadAI/EnemyAI)
+    this.ai = {};
+  }
 
-        // Callsign
-        this.callsign = isEnemy ?
-            ENEMY_CALLSIGNS[id % ENEMY_CALLSIGNS.length] + '-' + (Math.floor(id / ENEMY_CALLSIGNS.length) + 1) :
-            CALLSIGNS[id % CALLSIGNS.length];
+  get moving() {
+    return this.alive && this.path && this.path.length > 0;
+  }
 
-        // Behaviors
-        this.holdPosition = false;
-        this.engageOnSight = true;
+  setPath(path, goal) {
+    this.path = path && path.length ? [...path] : null;
+    this.moveGoal = this.path ? { ...(goal ?? path[path.length - 1]) } : null;
+  }
 
-        // Vision/FOV
-        this.fovAngle = Math.PI / 2.5; // ~72 degrees field of view
-        this.sightRange = 30; // Visual range in units
-    }
+  stop() {
+    this.path = null;
+    this.moveGoal = null;
+  }
 
-    // Move towards target
-    moveTo(x, z) {
-        this.targetX = x;
-        this.targetZ = z;
-        this.state = UnitState.MOVING;
-        this.holdPosition = false;
-    }
+  kill() {
+    this.alive = false;
+    this.stop();
+    this.firing = false;
+  }
 
-    // Hold current position
-    hold() {
-        this.targetX = null;
-        this.targetZ = null;
-        this.state = UnitState.IDLE;
-        this.holdPosition = true;
-    }
+  update(dt) {
+    if (!this.alive) return;
+    this.fireCooldown = Math.max(0, this.fireCooldown - dt);
 
-    // Update unit position and state
-    update(deltaTime, enemies, coverPositions) {
-        if (!this.alive) return;
-
-        // Update position if moving
-        if (this.targetX !== null && this.targetZ !== null) {
-            const dx = this.targetX - this.x;
-            const dz = this.targetZ - this.z;
-            const dist = Math.sqrt(dx * dx + dz * dz);
-
-            if (dist > 0.5) {
-                // Move towards target
-                const moveSpeed = this.speed * deltaTime;
-                const moveRatio = Math.min(moveSpeed / dist, 1);
-
-                this.x += dx * moveRatio;
-                this.z += dz * moveRatio;
-
-                // Face movement direction
-                this.rotation = Math.atan2(dx, dz);
-            } else {
-                // Reached target
-                this.x = this.targetX;
-                this.z = this.targetZ;
-                this.targetX = null;
-                this.targetZ = null;
-                this.state = UnitState.IDLE;
-            }
+    if (this.moving) {
+      const wp = this.path[0];
+      const d = dist(this.pos, wp);
+      const desired = angleTo(this.pos, wp);
+      this._turnToward(desired, dt);
+      const step = this.speed * dt;
+      if (d <= step) {
+        this.pos = { ...wp };
+        this.path.shift();
+        if (this.path.length === 0) {
+          this.path = null;
+          this.moveGoal = null;
         }
-
-        // Check for engagement targets
-        if (this.engageOnSight && enemies && enemies.length > 0) {
-            this.findAndEngageTarget(enemies);
-        }
+      } else {
+        this.pos.x += Math.cos(desired) * step;
+        this.pos.y += Math.sin(desired) * step;
+      }
+    } else if (this.watchHeading !== null) {
+      this._turnToward(this.watchHeading, dt);
     }
+  }
 
-    // Find nearest enemy and engage
-    findAndEngageTarget(enemies) {
-        if (!this.alive) return;
+  _turnToward(target, dt) {
+    const diff = normalizeAngle(target - this.heading);
+    const maxTurn = CONFIG.TURN_SPEED * dt;
+    if (Math.abs(diff) <= maxTurn) this.heading = target;
+    else this.heading += Math.sign(diff) * maxTurn;
+    this.heading = normalizeAngle(this.heading);
+  }
 
-        const livingEnemies = enemies.filter(e => e.alive);
-        if (livingEnemies.length === 0) {
-            this.engagementTarget = null;
-            return;
-        }
+  seesPoint(p, walls) {
+    return canSee(this, p, CONFIG.VISION_RANGE, CONFIG.VISION_ANGLE / 2, walls);
+  }
 
-        // Find closest enemy within range (30 units)
-        let closest = null;
-        let closestDist = 30;
-
-        livingEnemies.forEach(enemy => {
-            const dx = enemy.x - this.x;
-            const dz = enemy.z - this.z;
-            const dist = Math.sqrt(dx * dx + dz * dz);
-
-            if (dist < closestDist) {
-                closestDist = dist;
-                closest = enemy;
-            }
-        });
-
-        this.engagementTarget = closest;
-
-        if (closest) {
-            // Face the target
-            const dx = closest.x - this.x;
-            const dz = closest.z - this.z;
-            this.rotation = Math.atan2(dx, dz);
-
-            if (this.state !== UnitState.MOVING) {
-                this.state = UnitState.ENGAGING;
-            }
-        }
-    }
-
-    // Try to fire at engagement target
-    tryFire(currentTime) {
-        if (!this.alive || !this.engagementTarget || !this.engagementTarget.alive) {
-            return null;
-        }
-
-        const timeSinceLastFire = currentTime - this.lastFireTime;
-        const fireInterval = 1 / this.fireRate;
-
-        if (timeSinceLastFire < fireInterval) {
-            return null;
-        }
-
-        this.lastFireTime = currentTime;
-
-        // Calculate bullet trajectory
-        const dx = this.engagementTarget.x - this.x;
-        const dz = this.engagementTarget.z - this.z;
-        const dist = Math.sqrt(dx * dx + dz * dz);
-
-        // Determine if hit (probabilistic)
-        const hitRoll = Math.random();
-        const adjustedAccuracy = this.accuracy * (1 - dist / 60); // Accuracy decreases with distance
-        const isHit = hitRoll < adjustedAccuracy;
-
-        // Bullet velocity
-        const bulletSpeed = 80;
-        const vx = (dx / dist) * bulletSpeed;
-        const vz = (dz / dist) * bulletSpeed;
-
-        return {
-            x: this.x,
-            z: this.z,
-            vx: vx,
-            vz: vz,
-            targetId: this.engagementTarget.id,
-            isHit: isHit,
-            lifetime: dist / bulletSpeed + 0.1
-        };
-    }
-
-    // Kill this unit
-    kill() {
-        this.alive = false;
-        this.state = UnitState.DEAD;
-        this.targetX = null;
-        this.targetZ = null;
-        this.engagementTarget = null;
-    }
-
-    // Check if within explosion radius
-    checkExplosionDamage(explosionX, explosionZ, radius) {
-        if (!this.alive) return false;
-
-        const dx = explosionX - this.x;
-        const dz = explosionZ - this.z;
-        const dist = Math.sqrt(dx * dx + dz * dz);
-
-        // Kill probability based on distance from center
-        if (dist < radius) {
-            const killChance = 1 - (dist / radius) * 0.5;
-            if (Math.random() < killChance) {
-                this.kill();
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    // Get status for display
-    getStatus() {
-        return {
-            callsign: this.callsign,
-            state: this.state,
-            alive: this.alive,
-            position: { x: this.x, z: this.z },
-            hasTarget: this.engagementTarget !== null
-        };
-    }
+  seesUnit(other, walls) {
+    return other.alive && this.seesPoint(other.pos, walls);
+  }
 }
