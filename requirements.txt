@@ -1,20 +1,10 @@
-# Project Overwatch - Python Dependencies
+# Project Overwatch - Python dependencies
 
-# WebSocket server
-websockets>=12.0
+fastapi>=0.110.0
+uvicorn>=0.29.0
+httpx>=0.27.0
+pydantic>=2.6.0
 
-# Speech-to-text (Whisper)
-openai-whisper>=20230314
-torch>=2.0.0
-
-# Text-to-speech options (install one)
-pyttsx3>=2.90        # Cross-platform, no internet required
-# edge-tts>=6.1.9    # Microsoft TTS (requires internet)
-
-# Audio processing
-numpy>=1.24.0
-soundfile>=0.12.0
-
-# Optional: For LLM-based dialogue (uncomment if using)
-# llama-cpp-python>=0.2.0
-# transformers>=4.30.0
+# Optional: local Whisper STT (only needed for the "Whisper (server)" STT mode)
+# pip install faster-whisper
+# faster-whisper>=1.0.0
